@@ -1,0 +1,39 @@
+=============================================
+  ETL VALIDATION REPORT — LAYOFFS DATA
+  Run time: 2026-11-16 13:57
+=============================================
+
+✅ Total rows loaded: 4644
+
+--- NULL CHECK ---
+   null_laid_off  null_company  null_industry  null_country
+0           1614             0              2             2
+
+--- DUPLICATE CHECK ---
+Companies with multiple entries (top 5):
+      company  count
+0      Amazon     25
+1      Google     19
+2   Microsoft     18
+3  Salesforce     15
+4       Intel     13
+
+--- TOP 5 COMPANIES BY LAYOFFS ---
+     company  total_laid_off
+0     Amazon         59560.0
+1      Intel         43167.0
+2       Meta         35700.0
+3  Microsoft         35355.0
+4       Dell         23650.0
+
+--- TOP 5 INDUSTRIES HIT ---
+         industry  total_laid_off
+0           Other        116865.0
+1          Retail        109908.0
+2        Hardware        105532.0
+3        Consumer         99054.0
+4  Transportation         71023.0
+
+=============================================
+  VALIDATION COMPLETE
+=============================================

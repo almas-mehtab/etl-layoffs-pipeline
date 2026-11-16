@@ -1,50 +1,88 @@
 import pandas as pd
+import sqlite3
 from datetime import datetime
 
-# Load data
-df = pd.read_csv("C:/Users/ahmfa/Desktop/etl_layoff_project/data/layoffs.csv")
+# ── CONFIG ──────────────────────────────────────────
+CSV_PATH = "C:/Users/ahmfa/Desktop/etl_layoff_project/Data/layoffs.csv"
+DB_PATH  = "C:/Users/ahmfa/Desktop/etl_layoff_project/layoffs.db"
+OUT_PATH = "C:/Users/ahmfa/Desktop/etl_layoff_project/outputs/validation_report.txt"
 
-print("=" * 40)
-print("   ETL VALIDATION REPORT — LAYOFFS DATA")
-print(f"   Run time: {datetime.now().strftime('%Y-%m-%d %H:%M')}")
-print("=" * 40)
+# ── LOAD CSV INTO SQLITE ─────────────────────────────
+df = pd.read_csv(CSV_PATH)
+conn = sqlite3.connect(DB_PATH)
+df.to_sql("layoffs", conn, if_exists="replace", index=False)
 
-# 1. Row count
-print(f"\n✅ Total rows loaded: {len(df)}")
-print(f"✅ Total columns: {len(df.columns)}")
-print(f"   Columns: {list(df.columns)}")
+report = []
+report.append("=" * 45)
+report.append("  ETL VALIDATION REPORT — LAYOFFS DATA")
+report.append(f"  Run time: {datetime.now().strftime('%Y-%m-%d %H:%M')}")
+report.append("=" * 45)
 
-# 2. Null check
-print("\n--- NULL CHECK ---")
-null_counts = df.isnull().sum()
-nulls_found = null_counts[null_counts > 0]
-if len(nulls_found) > 0:
-    print("⚠️  Null values found:")
-    print(nulls_found)
-else:
-    print("✅ No nulls found")
+# ── SQL QUERY 1: Row count ───────────────────────────
+row_count = pd.read_sql("SELECT COUNT(*) as total_rows FROM layoffs", conn)
+report.append(f"\n✅ Total rows loaded: {row_count['total_rows'][0]}")
 
-# 3. Duplicate check
-print("\n--- DUPLICATE CHECK ---")
-dupes = df.duplicated().sum()
-if dupes > 0:
-    print(f"⚠️  {dupes} duplicate rows found")
-else:
-    print(f"✅ No duplicates found")
+# ── SQL QUERY 2: Null check ──────────────────────────
+report.append("\n--- NULL CHECK ---")
+null_check = pd.read_sql("""
+    SELECT 
+        SUM(CASE WHEN total_laid_off IS NULL THEN 1 ELSE 0 END) as null_laid_off,
+        SUM(CASE WHEN company IS NULL THEN 1 ELSE 0 END) as null_company,
+        SUM(CASE WHEN industry IS NULL THEN 1 ELSE 0 END) as null_industry,
+        SUM(CASE WHEN country IS NULL THEN 1 ELSE 0 END) as null_country
+    FROM layoffs
+""", conn)
+report.append(str(null_check))
 
-# 4. Schema check
-print("\n--- SCHEMA CHECK ---")
-print(df.dtypes)
+# ── SQL QUERY 3: Duplicate check ────────────────────
+report.append("\n--- DUPLICATE CHECK ---")
+dupes = pd.read_sql("""
+    SELECT company, COUNT(*) as count 
+    FROM layoffs 
+    GROUP BY company 
+    HAVING COUNT(*) > 1
+    ORDER BY count DESC
+    LIMIT 5
+""", conn)
+report.append(f"Companies with multiple entries (top 5):")
+report.append(str(dupes))
 
-# 5. Basic insights
-print("\n--- KEY INSIGHTS ---")
-print(f"Companies in dataset: {df['company'].nunique()}")
-print(f"Countries covered: {df['country'].nunique()}")
-print(f"\nTop 5 companies by layoffs:")
-print(df.groupby('company')['total_laid_off'].sum().sort_values(ascending=False).head())
-print(f"\nTop 5 industries hit:")
-print(df.groupby('industry')['total_laid_off'].sum().sort_values(ascending=False).head())
+# ── SQL QUERY 4: Top companies by layoffs ───────────
+report.append("\n--- TOP 5 COMPANIES BY LAYOFFS ---")
+top_companies = pd.read_sql("""
+    SELECT company, SUM(total_laid_off) as total_laid_off
+    FROM layoffs
+    WHERE total_laid_off IS NOT NULL
+    GROUP BY company
+    ORDER BY total_laid_off DESC
+    LIMIT 5
+""", conn)
+report.append(str(top_companies))
 
-print("\n" + "=" * 40)
-print("   VALIDATION COMPLETE")
-print("=" * 40)
+# ── SQL QUERY 5: Top industries ─────────────────────
+report.append("\n--- TOP 5 INDUSTRIES HIT ---")
+top_industries = pd.read_sql("""
+    SELECT industry, SUM(total_laid_off) as total_laid_off
+    FROM layoffs
+    WHERE total_laid_off IS NOT NULL
+    GROUP BY industry
+    ORDER BY total_laid_off DESC
+    LIMIT 5
+""", conn)
+report.append(str(top_industries))
+
+report.append("\n" + "=" * 45)
+report.append("  VALIDATION COMPLETE")
+report.append("=" * 45)
+
+# ── PRINT TO SCREEN ──────────────────────────────────
+for line in report:
+    print(line)
+
+# ── SAVE TO FILE ─────────────────────────────────────
+with open(OUT_PATH, "w") as f:
+    f.write("\n".join(report))
+
+print(f"\n📄 Report saved to: {OUT_PATH}")
+
+conn.close()
